@@ -40,10 +40,11 @@ pub fn schedule_presence_broadcasts(
 		socket.send(data)
 			.map(|bytes_written| if bytes_written != data.len() {
 				eprintln!("W: sending of {} truncated.", desc); })
-			.chain_err(|| format!("Error sending {}", desc))
+			.map_err(|e| format_err!("Error sending {}", desc))
+
 	};
 
-	let broadcast_presence = move || -> Result<()> {
+	let broadcast_presence = move || -> Result<(), Error> {
 		// eprintln!("Broadcasting presence.");
 		// eprintln!("{}", String::from_utf8_lossy(&msg_uuid));
 

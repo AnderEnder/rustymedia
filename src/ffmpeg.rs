@@ -13,7 +13,7 @@ use nix::fcntl::OFlag;
 use nix::sys::stat::Mode;
 use nix::libc::{O_APPEND, O_CLOEXEC, O_RDWR};
 use nix::libc::*;
-use error::MediaError;
+
 use failure::Error;
 
 fn start_cmd(cmd: &'static str) -> std::process::Command {
@@ -45,7 +45,7 @@ fn add_input(input: Input, exec: &::Executors, cmd: &mut std::process::Command) 
             exec.spawn(
                 content.for_each(move |chunk| {
                     write.write_all(&chunk)
-                        .chain_err(|| "Error writing to ffmpeg.")
+                        .map_err(|e|format_err!("Error writing to ffmpeg."))
                 }))?;
 
             cmd.arg("-i").arg("pipe:0");
@@ -201,7 +201,7 @@ pub fn format(input: Input, exec: &::Executors) -> ::Future<Format> {
 
     // eprintln!("Executing: {:?}", cmd);
 
-    let child = match cmd.spawn().chain_err(|| "Error executing ffprobe") {
+    let child = match cmd.spawn().map_err(|e|format_err!("Error executing ffprobe")) {
         Ok(child) => child,
         Err(e) => return Box::new(futures::future::err(e))
     };
@@ -295,7 +295,7 @@ struct MediaStream {
 impl MediaStream {
     fn read(&mut self, buf: &mut Vec<u8>) -> Result<i64, Error> {
         let len = self.file.file.read_at(buf, self.offset)
-            .chain_err(|| "Error reading in follower.")?;
+            .map_err(||format_err!("Error reading in follower."))?;
         // eprintln!("STREAM read {}-{} size {}", self.offset, self.offset+len as u64, len);
         unsafe { buf.set_len(len); }
         return Ok(len as i64)
@@ -384,7 +384,7 @@ pub fn transcode(source: &Format, target: &Format, input: Input, exec: &::Execut
 
     eprintln!("Executing: {:?}", cmd);
 
-    let mut child = cmd.spawn().chain_err(|| "Error executing ffmpeg")?;
+    let mut child = cmd.spawn().map_err(|e|format_err!("Error executing ffmpeg"))?;
 
     let media_file = std::sync::Arc::new(MediaFile{
         file: file.try_clone()?,

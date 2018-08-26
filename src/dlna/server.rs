@@ -67,7 +67,7 @@ impl<F: Fn() -> tokio_core::reactor::Remote> hyper::server::NewService for Serve
 	type Error = hyper::Error;
 	type Instance = ServerRef;
 
-	fn new_service(&self) -> Result<Self::Instance, Self::Error> {
+	fn new_service(&self) -> Result<Self::Instance, std::io::Error> {
 		Ok(ServerRef(std::sync::Arc::new(Server::new(self))))
 	}
 }
@@ -240,7 +240,7 @@ impl ServerRef {
 				server2.exec.spawn(
 					sender.send_all(content)
 						.map(|_| ())
-						.then(|r| r.chain_err(|| "Error sending body.")))?;
+						.then(|r| r.map_err(format_err!("Error sending body."))))?;
 
 				eprintln!("Response: {:?}", response);
 				response.set_body(body);
@@ -315,7 +315,7 @@ fn respond_soap<T: serde::Serialize + std::fmt::Debug>
 	// eprintln!("Responding with: {:#?}", body);
 	let mut buf = Vec::new();
 	::xml::serialize(&mut buf, dlna::types::Envelope{body})
-		.chain_err(|| "Error serializing XML.")?;
+        .map_err(|e| format_err!("Error serializing XML: {:?}", e))?;
 	// eprintln!("Emitting xml: {}", String::from_utf8_lossy(&buf));
 	Ok(hyper::Response::new()
 		.with_header(hyper::header::ContentType::xml())
@@ -365,8 +365,8 @@ impl hyper::server::Service for ServerRef {
 
 		let req = dlna::Request::new(req);
 		Box::new(self.call_root(req).or_else(|e| {
-			eprintln!("{}", e.display_chain());
-			Ok(hyper::Response::new()
+			eprintln!("{:?}", e);
+            Ok(hyper::Response::new()
 				.with_status(hyper::StatusCode::InternalServerError)
 				.with_body("Internal Error"))
 		}))

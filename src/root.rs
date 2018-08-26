@@ -1,6 +1,6 @@
 use std;
 use std::sync::Arc;
-// use error::MediaError;
+use error::MediaError;
 use failure::Error;
 
 #[derive(Debug)]
@@ -57,7 +57,7 @@ impl ::Object for Arc<Root> {
 		match self.items.get(first) {
 			Some(obj) => obj.lookup(suffix),
 			None => return Err(
-				Error::NotFound(format!("{:?} not found looking for {:?}", first, id)).into()
+				MediaError::NotFound(format!("{:?} not found looking for {:?}", first, id)).into()
 			)
 		}
 	}

@@ -1,8 +1,8 @@
 use std::path::PathBuf;
-use serde::ser;
-use std::fmt::Display;
-use std::fmt;
-use std;
+//use std::fmt::Display;
+// use std::fmt;
+// use std;
+// use futures::future::ExecuteError;
 
 #[derive(Fail, Debug)]
 pub enum MediaError {
@@ -22,13 +22,15 @@ pub enum MediaError {
     Unimplemented(&'static str),
     #[fail(display = "{}", _0)]
     Message(String),
+    #[fail(display = "{}", _0)]
+    Unsupported(&'static str),
 }
 
-impl ser::Error for MediaError {
-    fn custom<T: Display>(msg: T) -> Self {
-        MediaError::Message(msg.to_string())
-    }
-}
+//impl ser::Error for MediaError {
+//    fn custom<T: Display>(msg: T) -> Self {
+//        MediaError::Message(msg.to_string())
+//    }
+//}
 
 //error_chain!{
 //    errors {

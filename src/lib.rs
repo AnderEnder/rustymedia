@@ -3,7 +3,6 @@
 extern crate bytes;
 extern crate futures;
 extern crate futures_cpupool;
-// #[macro_use] extern crate error_chain;
 #[macro_use] extern crate hyper;
 #[macro_use] extern crate lazy_static;
 extern crate lru_cache;
@@ -22,7 +21,6 @@ extern crate tokio_io;
 #[macro_use]
 extern crate failure;
 
-// use error_chain::ChainedError;
 use futures::future::{Executor};
 use failure::Error;
 
@@ -76,8 +74,8 @@ impl Executors {
 		(&self, f: F) -> Result<(), Error>
 	{
 		self.cpupool.execute(
-			f.map_err(|e| { eprintln!("Error in spawned future: {}", e.display_chain()); }))
-				.map_err(|e| e.into())
+			f.map_err(|e| { eprintln!("Error in spawned future: {}", e); }))
+				.map_err(|e| format_err!("{:?}", e))
 	}
 }
 
@@ -139,7 +137,7 @@ pub trait Object: Send + Sync + std::fmt::Debug {
 	}
 
 	fn body(&self, _exec: &Executors) -> Result<std::sync::Arc<Media>, Error> {
-        return Err(Error::NotAFile(self.id().to_string()).into());
+        return Err(MediaError::NotAFile(self.id().to_string()).into());
     }
 
 	fn transcoded_body(

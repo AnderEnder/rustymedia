@@ -104,9 +104,9 @@ impl ::Object for Object {
 
 	fn children(&self) -> Result<Vec<Box<::Object>>, Error> {
 		self.path.read_dir()
-			.chain_err(|| "Getting children of local directory.")?
+			.map_err(|| format_err!("Getting children of local directory."))?
 			.map(|result| result
-				.chain_err(|| "Reading next direntry")
+				.map_err(|| format_err!("Reading next direntry"))
 				.and_then(|entry| {
 					Self::new_boxed(self.root.clone(), entry.path())
 				}))
@@ -140,12 +140,12 @@ impl ::Media for Media {
 		let mut file = match std::fs::File::open(&self.path) {
 			Ok(f) => f,
 			Err(e) => {
-				let e = ::Error::with_chain(e, format!("Error opening {:?}", self.path));
+				let e = format_err!("Error opening {:?}", self.path);
 				return Box::new(futures::future::err(e).into_stream())
 			}
 		};
 		if let Err(e) = file.seek(std::io::SeekFrom::Start(start)) {
-			let e = ::Error::with_chain(e, format!("Error seeking {:?}", self.path));
+//			let e = ::Error::with_chain(e, format!("Error seeking {:?}", self.path));
 			return Box::new(futures::future::err(e).into_stream())
 		}
 		Box::new(::ReadStream(file.take(end)))

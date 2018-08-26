@@ -33,7 +33,7 @@ impl Request {
 	fn decoded_path(&self) -> Result<String, Error> {
 		percent_encoding::percent_decode(self.path().as_bytes())
 			.decode_utf8()
-			.chain_err(|| "Error percent-decoding path to utf8")
+			.map_err(|e| format_err!("Error percent-decoding path to utf8: {:?}", e))
 			.map(|s| s.to_string())
 	}
 
@@ -57,7 +57,7 @@ impl Request {
 
 	fn body_vec(self) -> Box<Future<Item=Vec<u8>, Error=Error>> {
 		Box::new(self.req.body()
-			.then(|r| r.chain_err(|| "Parsing request body."))
+			.then(|r| r.map_err(|e| format_err!("Parsing request body: {:?}", e)))
 			.fold(Vec::new(), |mut v, chunk| {
 				v.extend(chunk);
 				Ok::<_,Error>(v)
@@ -66,7 +66,7 @@ impl Request {
 
 	fn body_str_lossy(self) -> Box<Future<Item=String, Error=Error>> {
 		Box::new(self.req.body()
-			.then(|r| r.chain_err(|| "Parsing request body."))
+			.then(|r| r.map_err(|e| format_err!("Parsing request body: {:?}", e)))
 			.fold(String::new(), |mut s, chunk| {
 				s += &String::from_utf8_lossy(&chunk);
 				Ok::<_, Error>(s)
@@ -80,8 +80,7 @@ impl Request {
 			.and_then(|v| {
 				eprintln!("Parsing xml: {}", String::from_utf8_lossy(&v));
 				serde_xml_rs::deserialize(&v[..])
-					.chain_err(||
-						format!("Error parsing xml:\n{}", String::from_utf8_lossy(&v)))
+					.map_err(|e| format_err!("Error parsing xml:\n{}", String::from_utf8_lossy(&v)))
 			})
 			.inspect(|xml| eprintln!("Request: {:#?}", xml)))
 	}

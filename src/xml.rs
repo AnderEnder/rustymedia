@@ -1,10 +1,44 @@
 use std::io::Write;
 use serde;
 use std;
+use std::fmt::{self, Display};
 
-use error::MediaError;
-use failure::Error;
-// pub use xml::error::{Error, MediaError, Result};
+//pub type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Debug)]
+pub enum Error {
+	Message(String),
+	Io(std::io::Error),
+	Unsupported(&'static str),
+}
+
+impl serde::ser::Error for Error {
+	fn custom<T: Display>(msg: T) -> Self {
+		Error::Message(msg.to_string())
+	}
+}
+
+impl serde::de::Error for Error {
+	fn custom<T: Display>(msg: T) -> Self {
+		Error::Message(msg.to_string())
+	}
+}
+
+impl Display for Error {
+	fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+		formatter.write_str(std::error::Error::description(self))
+	}
+}
+
+impl std::error::Error for Error {
+	fn description(&self) -> &str {
+		match *self {
+			Error::Message(ref msg) => msg,
+			Error::Io(ref e) => &format!("{:?}", e),
+			Error::Unsupported(ref msg) => msg,
+		}
+	}
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename="||KXML body node||")]
@@ -41,55 +75,66 @@ impl<'a, W: Write> serde::ser::Serializer for &'a mut Serializer<W> {
 	type SerializeStructVariant = serde::ser::Impossible<Self::Ok, Self::Error>;
 
 	fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
-		write!(self.writer, "{}", v)?; Ok(())
+		write!(self.writer, "{}", v).map_err(Error::Io)?;
+		Ok(())
 	}
 
 	fn serialize_i8(self, v: i8) -> Result<Self::Ok, Self::Error> {
-		write!(self.writer, "{}", v)?; Ok(())
+		write!(self.writer, "{}", v).map_err(Error::Io)?;;
+		Ok(())
 	}
 
 	fn serialize_i16(self, v: i16) -> Result<Self::Ok, Self::Error> {
-		write!(self.writer, "{}", v)?; Ok(())
+		write!(self.writer, "{}", v).map_err(Error::Io)?;
+		Ok(())
 	}
 
 	fn serialize_i32(self, v: i32) -> Result<Self::Ok, Self::Error> {
-		write!(self.writer, "{}", v)?; Ok(())
+		write!(self.writer, "{}", v).map_err(Error::Io)?;
+		Ok(())
 	}
 
 	fn serialize_i64(self, v: i64) -> Result<Self::Ok, Self::Error> {
-		write!(self.writer, "{}", v)?; Ok(())
+		write!(self.writer, "{}", v).map_err(Error::Io)?;
+		Ok(())
 	}
 
 	fn serialize_u8(self, v: u8) -> Result<Self::Ok, Self::Error> {
-		write!(self.writer, "{}", v)?; Ok(())
+		write!(self.writer, "{}", v).map_err(Error::Io)?;
+		Ok(())
 	}
 
 	fn serialize_u16(self, v: u16) -> Result<Self::Ok, Self::Error> {
-		write!(self.writer, "{}", v)?; Ok(())
+		write!(self.writer, "{}", v).map_err(Error::Io)?;
+		Ok(())
 	}
 
 	fn serialize_u32(self, v: u32) -> Result<Self::Ok, Self::Error> {
-		write!(self.writer, "{}", v)?; Ok(())
+		write!(self.writer, "{}", v).map_err(Error::Io)?;
+		Ok(())
 	}
 
 	fn serialize_u64(self, v: u64) -> Result<Self::Ok, Self::Error> {
-		write!(self.writer, "{}", v)?; Ok(())
+		write!(self.writer, "{}", v).map_err(Error::Io)?;
+		Ok(())
 	}
 
 	fn serialize_f32(self, v: f32) -> Result<Self::Ok, Self::Error> {
-		write!(self.writer, "{}", v)?; Ok(())
+		write!(self.writer, "{}", v).map_err(Error::Io)?;
+		Ok(())
 	}
 
 	fn serialize_f64(self, v: f64) -> Result<Self::Ok, Self::Error> {
-		write!(self.writer, "{}", v)?; Ok(())
+		write!(self.writer, "{}", v).map_err(Error::Io)?;
+		Ok(())
 	}
 
 	fn serialize_char(self, c: char) -> Result<Self::Ok, Self::Error> {
 		match c {
-			'"' => write!(self.writer, "&quot;")?,
-			'<' => write!(self.writer, "&lt;")?,
-			'&' => write!(self.writer, "&amp;")?,
-			c => write!(self.writer, "{}", c)?,
+			'"' => write!(self.writer, "&quot;").map_err(Error::Io)?,
+			'<' => write!(self.writer, "&lt;").map_err(Error::Io)?,
+			'&' => write!(self.writer, "&amp;").map_err(Error::Io)?,
+			c => write!(self.writer, "{}", c).map_err(Error::Io)?,
 		}
 		Ok(())
 	}
@@ -102,7 +147,7 @@ impl<'a, W: Write> serde::ser::Serializer for &'a mut Serializer<W> {
 	}
 
 	fn serialize_bytes(self, _value: &[u8]) -> Result<Self::Ok, Self::Error> {
-		Err(MediaError::Unsupported("serialize_bytes").into())
+		Err(Error::Unsupported("serialize_bytes"))
 	}
 
 	fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
@@ -119,7 +164,7 @@ impl<'a, W: Write> serde::ser::Serializer for &'a mut Serializer<W> {
 
 	fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
 		check_valid_name(name)?;
-		write!(self.writer, "<{}/>", name)?;
+		write!(self.writer, "<{}/>", name).map_err(Error::Io)?;
 		Ok(())
 	}
 
@@ -127,14 +172,14 @@ impl<'a, W: Write> serde::ser::Serializer for &'a mut Serializer<W> {
 		_name: &'static str, _variant_index: u32, _variant: &'static str)
 		-> Result<Self::Ok, Self::Error>
 	{
-		Err(MediaError::Unsupported("serialize_unit_variant").into())
+		Err(Error::Unsupported("serialize_unit_variant"))
 	}
 
 	fn serialize_newtype_struct<T: ?Sized + serde::Serialize>
 		(self, _name: &'static str, value: &T)
 		-> Result<Self::Ok, Self::Error>
 	{
-		value.serialize(&mut *self)?;
+		value.serialize(&mut *self);
 		Ok(())
 	}
 
@@ -143,42 +188,42 @@ impl<'a, W: Write> serde::ser::Serializer for &'a mut Serializer<W> {
 		-> Result<Self::Ok, Self::Error>
 	{
 		check_valid_name(name)?;
-		write!(self.writer, "<{}>", variant)?;
+		write!(self.writer, "<{}>", variant).map_err(Error::Io)?;
 		value.serialize(&mut *self)?;
-		write!(self.writer, "</{}>", variant)?;
+		write!(self.writer, "</{}>", variant).map_err(Error::Io)?;
 		Ok(())
 	}
 
 	fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
-		Err(MediaError::Unsupported("serialize_seq").into())
+		Err(Error::Unsupported("serialize_seq"))
 	}
 
 	fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple, Self::Error> {
-		Err(MediaError::Unsupported("serialize_tuple").into())
+		Err(Error::Unsupported("serialize_tuple"))
 	}
 
 	fn serialize_tuple_struct(self, _name: &'static str, _len: usize)
 		-> Result<Self::SerializeTupleStruct, Self::Error>
 	{
-		Err(MediaError::Unsupported("serialize_tuple_struct").into())
+		Err(Error::Unsupported("serialize_tuple_struct"))
 	}
 
 	fn serialize_tuple_variant(self,
 		_name: &'static str, _variant_index: u32, _variant: &'static str, _len: usize)
 		-> Result<Self::SerializeTupleVariant, Self::Error>
 	{
-		Err(MediaError::Unsupported("serialize_tuple_variant").into())
+		Err(Error::Unsupported("serialize_tuple_variant"))
 	}
 
 	fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
-		Err(MediaError::Unsupported("serialize_map").into())
+		Err(Error::Unsupported("serialize_map"))
 	}
 
 	fn serialize_struct(self, name: &'static str, _len: usize)
 		-> Result<Self::SerializeStruct, Self::Error>
 	{
 		check_valid_name(name)?;
-		write!(self.writer, "<{}", name)?;
+		write!(self.writer, "<{}", name).map_err(Error::Io)?;
 		Ok(Struct{
 			parent: self,
 			name: name,
@@ -190,7 +235,7 @@ impl<'a, W: Write> serde::ser::Serializer for &'a mut Serializer<W> {
 		_name: &'static str, _variant_index: u32, _variant: &'static str, _len: usize)
 		-> Result<Self::SerializeStructVariant, Self::Error>
 	{
-		Err(MediaError::Unsupported("serialize_struct_variant").into())
+		Err(Error::Unsupported("serialize_struct_variant"))
 	}
 }
 
@@ -225,9 +270,9 @@ impl<'a, 'b, 'c, W: Write> SeqSubSerializer<'a, 'b, 'c, W> {
 	fn wrapped<F: FnOnce(&mut Serializer<W>)->Result<(), Error>>(&mut self, f: F) -> Result<(), Error> {
 		check_valid_name(self.name)?;
 
-		write!(self.parent.parent.parent.parent.writer, "<{}>", self.name)?;
+		write!(self.parent.parent.parent.parent.writer, "<{}>", self.name).map_err(Error::Io)?;
 		let r = f(self.root());
-		write!(self.parent.parent.parent.parent.writer, "</{}>", self.name)?;
+		write!(self.parent.parent.parent.parent.writer, "</{}>", self.name).map_err(Error::Io)?;
 		r
 	}
 
@@ -313,7 +358,7 @@ impl<'a, 'b, 'c, W: Write> serde::ser::Serializer for SeqSubSerializer<'a, 'b, '
 	}
 
 	fn serialize_some<T: ?Sized + serde::Serialize>(self, _value: &T) -> Result<Self::Ok, Self::Error> {
-		Err(MediaError::Unsupported("serialize_some inside sequence").into())
+		Err(Error::Unsupported("serialize_some inside sequence"))
 	}
 
 	fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
@@ -346,7 +391,7 @@ impl<'a, 'b, 'c, W: Write> serde::ser::Serializer for SeqSubSerializer<'a, 'b, '
 	}
 
 	fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
-		Err(MediaError::Unsupported("serialize_seq").into())
+		Err(Error::Unsupported("serialize_seq"))
 	}
 
 	fn serialize_tuple(mut self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
@@ -377,7 +422,7 @@ impl<'a, 'b, 'c, W: Write> serde::ser::Serializer for SeqSubSerializer<'a, 'b, '
 		-> Result<Self::SerializeStruct, Self::Error>
 	{
 		check_valid_name(name)?;
-		write!(self.writer(), "<{}", name)?;
+		write!(self.writer(), "<{}", name).map_err(Error::Io)?;
 		Ok(Struct {
 			parent: self.parent.parent.parent.parent,
 			name: name,
@@ -404,7 +449,7 @@ impl<'a, W: std::io::Write> Struct<'a, W> {
 	fn enter_body(&mut self) -> Result<(), Error> {
 		if !self.body {
 			self.body = true;
-			write!(self.parent.writer, ">")?;
+			write!(self.parent.writer, ">").map_err(Error::Io)?;
 		}
 		Ok(())
 	}
@@ -423,9 +468,9 @@ impl<'a, W: Write> serde::ser::SerializeStruct for Struct<'a, W> {
 
 	fn end(self) -> Result<Self::Ok, Self::Error> {
 		if self.body {
-			write!(self.parent.writer, "</{}>", self.name)?;
+			write!(self.parent.writer, "</{}>", self.name).map_err(Error::Io)?;
 		} else {
-			write!(self.parent.writer, "/>")?;
+			write!(self.parent.writer, "/>").map_err(Error::Io)?;
 		}
 		Ok(())
 	}
@@ -442,9 +487,9 @@ impl<'a, 'b, W: Write> SubSerializer<'a, 'b, W> {
 
 		if self.parent.body { return self.child(f) }
 
-		write!(self.parent.parent.writer, " {}=\"", self.name)?;
+		write!(self.parent.parent.writer, " {}=\"", self.name).map_err(Error::Io)?;
 		let r = f(self.parent.parent);
-		write!(self.parent.parent.writer, "\"")?;
+		write!(self.parent.parent.writer, "\"").map_err(Error::Io)?;
 		r
 	}
 
@@ -452,9 +497,9 @@ impl<'a, 'b, W: Write> SubSerializer<'a, 'b, W> {
 		check_valid_name(self.name)?;
 
 		self.parent.enter_body()?;
-		write!(self.parent.parent.writer, "<{}>", self.name)?;
+		write!(self.parent.parent.writer, "<{}>", self.name).map_err(Error::Io)?;
 		let r = f(self.parent.parent);
-		write!(self.parent.parent.writer, "</{}>", self.name)?;
+		write!(self.parent.parent.writer, "</{}>", self.name).map_err(Error::Io)?;
 		r
 	}
 }
