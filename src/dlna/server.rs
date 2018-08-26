@@ -1,5 +1,4 @@
 use bytes;
-use error_chain::ChainedError;
 use futures;
 use futures::{Future, Sink, Stream};
 use futures_cpupool;
@@ -11,7 +10,9 @@ use tokio_core;
 
 use ::Object;
 use dlna;
-use error::{ResultExt};
+
+use failure::Error;
+// use error::Error;
 
 const CONNECTION_XML: &str = include_str!("connection.xml");
 const CONTENT_XML: &str = include_str!("content.xml");
@@ -37,7 +38,7 @@ pub struct ServerFactory<F> {
 	root: std::sync::Arc<::root::Root>,
 	shared: std::sync::Arc<Shared>,
 	root_xml: bytes::Bytes,
-	
+
 	cpupool: std::sync::Arc<futures_cpupool::CpuPool>,
 }
 
@@ -54,7 +55,7 @@ impl<F> ServerFactory<F> {
 				name=args.name,
 				uuid=args.uuid
 			).into(),
-			
+
 			cpupool: std::sync::Arc::new(futures_cpupool::CpuPool::new(8)),
 		}
 	}
@@ -65,8 +66,8 @@ impl<F: Fn() -> tokio_core::reactor::Remote> hyper::server::NewService for Serve
 	type Response = hyper::Response;
 	type Error = hyper::Error;
 	type Instance = ServerRef;
-	
-	fn new_service(&self) -> Result<Self::Instance, std::io::Error> {
+
+	fn new_service(&self) -> Result<Self::Instance, Self::Error> {
 		Ok(ServerRef(std::sync::Arc::new(Server::new(self))))
 	}
 }
@@ -77,7 +78,7 @@ pub struct Server {
 	root: std::sync::Arc<::root::Root>,
 	shared: std::sync::Arc<Shared>,
 	root_xml: bytes::Bytes,
-	
+
 	exec: ::Executors,
 }
 
@@ -106,7 +107,7 @@ impl ServerRef {
 				if *req.req.method() != hyper::Method::Get {
 					return call_method_not_allowed(req)
 				}
-				
+
 				respond_ok(
 					hyper::Response::new()
 						.with_status(hyper::StatusCode::Ok)
@@ -118,7 +119,7 @@ impl ServerRef {
 			_ => call_not_found(req),
 		}
 	}
-	
+
 	fn call_connection(&self, mut req: dlna::Request) -> BoxedResponse {
 		match req.pop() {
 			"desc.xml" => {
@@ -127,7 +128,7 @@ impl ServerRef {
 			_ => call_not_found(req),
 		}
 	}
-	
+
 	fn call_content(&self, mut req: dlna::Request) -> BoxedResponse {
 		match req.pop() {
 			"control" => self.call_content_soap(req),
@@ -135,7 +136,7 @@ impl ServerRef {
 			_ => call_not_found(req),
 		}
 	}
-	
+
 	fn call_content_soap(&self, req: dlna::Request) -> BoxedResponse {
 		let action = match req.req.headers().get::<Soapaction>() {
 			Some(action) => {
@@ -147,7 +148,7 @@ impl ServerRef {
 			}
 			None => return respond_soap_fault("No Soapaction header."),
 		}.to_string(); // TODO: Fix this last lifetime fix.
-		
+
 		match &action[..] {
 			"Browse" => {
 				let this = self.clone();
@@ -156,7 +157,7 @@ impl ServerRef {
 			other => respond_soap_fault(&format!("Unknown action {:?}", other)),
 		}
 	}
-	
+
 	fn call_video(&self, req: dlna::Request) -> BoxedResponse {
 		let path = match req.decoded_path() {
 			Ok(p) => p,
@@ -166,12 +167,12 @@ impl ServerRef {
 			Ok(path) => path,
 			Err(e) => return respond_err(e),
 		};
-		
+
 		let server = self.0.clone();
 		let server2 = self.0.clone();
 
 		let device = ::devices::identify(&req.req);
-		
+
 		let r = item.format(&server.exec)
 			.and_then(move |format| {
 				let mut cache = server.shared.transcode_cache.lock().unwrap();
@@ -183,9 +184,9 @@ impl ServerRef {
 						hyper::header::RangeUnit::Bytes,
 					]))
 					.with_header(hyper::header::ContentType::octet_stream());
-				
+
 				let size = media.size();
-				
+
 				let range = req.req.headers().get::<hyper::header::Range>()
 					.and_then(|range| match *range {
 						hyper::header::Range::Bytes(ref spec) => Some(spec),
@@ -211,7 +212,7 @@ impl ServerRef {
 							None
 						}
 					});
-				
+
 				let content = match range {
 					Some((start, end)) => {
 						response.set_status(hyper::StatusCode::PartialContent);
@@ -230,28 +231,28 @@ impl ServerRef {
 						media.read_all() // No range.
 					}
 				};
-				
+
 				let content = content
 					.map(|c| Ok(c.into()))
 					.map_err(|e| e.into());
-				
+
 				let (sender, body) = hyper::Body::pair();
 				server2.exec.spawn(
 					sender.send_all(content)
 						.map(|_| ())
 						.then(|r| r.chain_err(|| "Error sending body.")))?;
-				
+
 				eprintln!("Response: {:?}", response);
 				response.set_body(body);
 				Ok(response)
 			});
-		
+
 		Box::new(r)
 	}
-	
-	fn call_dlna_browse(self, body: dlna::types::Body) -> ::Result<hyper::Response> {
+
+	fn call_dlna_browse(self, body: dlna::types::Body) -> Result<hyper::Response, hyper::Error> {
 		let object = self.0.root.lookup(&body.browse.object_id)?;
-		
+
 		let mut containers = Vec::new();
 		let mut items = Vec::new();
 		for entry in object.relevant_children()?.iter() {
@@ -282,7 +283,7 @@ impl ServerRef {
 				}),
 			}
 		}
-		
+
 		respond_soap(dlna::types::BodyBrowseResponse {
 			browse_response: dlna::types::BrowseResponse {
 				number_returned: 1,
@@ -304,12 +305,12 @@ fn respond_ok(res: hyper::Response) -> BoxedResponse {
 	Box::new(futures::future::ok(res))
 }
 
-fn respond_err(e: ::error::Error) -> BoxedResponse {
+fn respond_err(e: Error) -> BoxedResponse {
 	Box::new(futures::future::err(e))
 }
 
 fn respond_soap<T: serde::Serialize + std::fmt::Debug>
-	(body: T) -> ::error::Result<hyper::Response>
+	(body: T) -> Result<hyper::Response, hyper::Error>
 {
 	// eprintln!("Responding with: {:#?}", body);
 	let mut buf = Vec::new();
@@ -348,7 +349,7 @@ fn call_method_not_allowed(req: dlna::Request) -> BoxedResponse {
 			.with_status(hyper::StatusCode::MethodNotAllowed))
 }
 
-type BoxedResponse = Box<futures::Future<Item = hyper::Response, Error = ::error::Error>>;
+type BoxedResponse = Box<futures::Future<Item = hyper::Response, Error = hyper::Error>>;
 
 #[derive(Clone,Debug)]
 pub struct ServerRef(std::sync::Arc<Server>);
@@ -358,10 +359,10 @@ impl hyper::server::Service for ServerRef {
 	type Response = hyper::Response;
 	type Error = hyper::Error;
 	type Future = Box<futures::Future<Item=hyper::Response, Error=hyper::Error>>;
-	
+
 	fn call(&self, req: Self::Request) -> Self::Future {
 		if !req.path().ends_with(".xml") { eprintln!("{:?}", req) }
-		
+
 		let req = dlna::Request::new(req);
 		Box::new(self.call_root(req).or_else(|e| {
 			eprintln!("{}", e.display_chain());

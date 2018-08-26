@@ -3,7 +3,7 @@
 extern crate bytes;
 extern crate futures;
 extern crate futures_cpupool;
-#[macro_use] extern crate error_chain;
+// #[macro_use] extern crate error_chain;
 #[macro_use] extern crate hyper;
 #[macro_use] extern crate lazy_static;
 extern crate lru_cache;
@@ -19,21 +19,24 @@ extern crate smallvec;
 extern crate tokio_core;
 extern crate tokio_file_unix;
 extern crate tokio_io;
+#[macro_use]
+extern crate failure;
 
-use error_chain::ChainedError;
+// use error_chain::ChainedError;
 use futures::future::{Executor};
+use failure::Error;
 
 mod cache;
 mod config;
 mod devices;
 pub mod dlna;
-mod error;
+pub mod error;
 mod ffmpeg;
 pub mod local;
 pub mod root;
 mod xml;
 
-pub use error::{Error,ErrorKind,Result};
+pub use error::MediaError;
 
 pub type Future<T> = Box<futures::Future<Item=T, Error=Error> + Send>;
 pub type ByteStream = Box<futures::Stream<Item=Vec<u8>, Error=Error> + Send>;
@@ -70,7 +73,7 @@ pub struct Executors {
 impl Executors {
 	fn spawn<
 		F: 'static + futures::future::Future<Item=(),Error=Error> + Send>
-		(&self, f: F) -> Result<()>
+		(&self, f: F) -> Result<(), Error>
 	{
 		self.cpupool.execute(
 			f.map_err(|e| { eprintln!("Error in spawned future: {}", e.display_chain()); }))
@@ -105,11 +108,11 @@ pub trait Object: Send + Sync + std::fmt::Debug {
 	fn title(&self) -> String;
 
 	fn is_dir(&self) -> bool;
-	fn lookup(&self, id: &str) -> Result<Box<Object>>;
+	fn lookup(&self, id: &str) -> Result<Box<Object>, Error>;
 
-	fn children(&self) -> Result<Vec<Box<Object>>>;
+	fn children(&self) -> Result<Vec<Box<Object>>, Error>;
 
-	fn relevant_children(&self) -> Result<Vec<Box<Object>>> {
+	fn relevant_children(&self) -> Result<Vec<Box<Object>>, Error> {
 		let mut children = self.children()?;
 		children.retain(|c| match c.file_type() {
 			Type::Directory => true,
@@ -123,7 +126,7 @@ pub trait Object: Send + Sync + std::fmt::Debug {
 		Ok(children)
 	}
 
-	fn ffmpeg_input(&self, exec: &Executors) -> Result<::ffmpeg::Input> {
+	fn ffmpeg_input(&self, exec: &Executors) -> Result<::ffmpeg::Input, Error> {
 		Ok(::ffmpeg::Input::Stream(self.body(exec)?.read_all()))
 	}
 
@@ -135,15 +138,15 @@ pub trait Object: Send + Sync + std::fmt::Debug {
 		::ffmpeg::format(ffmpeg_input, exec)
 	}
 
-	fn body(&self, _exec: &Executors) -> Result<std::sync::Arc<Media>> {
-		Err(ErrorKind::NotAFile(self.id().to_string()).into())
-	}
+	fn body(&self, _exec: &Executors) -> Result<std::sync::Arc<Media>, Error> {
+        return Err(Error::NotAFile(self.id().to_string()).into());
+    }
 
 	fn transcoded_body(
 		&self, exec: &Executors,
 		source: &::ffmpeg::Format,
 		target: &::ffmpeg::Format
-	) -> Result<std::sync::Arc<Media>> {
+	) -> Result<std::sync::Arc<Media>, Error> {
 		::ffmpeg::transcode(source, target, self.ffmpeg_input(exec)?, exec)
 	}
 }
@@ -157,7 +160,7 @@ pub trait Media: Send + Sync + std::fmt::Debug {
 	fn size(&self) -> MediaSize;
 
 	fn read_range(&self, start: u64, end: u64) -> ByteStream;
-	
+
 	fn read_all(&self) -> ByteStream {
 		self.read_range(0, u64::max_value())
 	}

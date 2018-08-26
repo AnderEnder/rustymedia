@@ -5,7 +5,7 @@ use std::io::{Read, Seek};
 use std::sync::Arc;
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
-use error::{ResultExt};
+use failure::Error;
 
 #[derive(Debug)]
 pub struct Root {
@@ -21,7 +21,7 @@ pub struct Object {
 }
 
 impl Object {
-	pub fn new(root: Arc<Root>, path: std::path::PathBuf) -> ::Result<Object> {
+	pub fn new(root: Arc<Root>, path: std::path::PathBuf) -> Result<Object, Error> {
 		let relpath = &path_remove_prefix(&path, &root.path);
 		let relpath = relpath.to_string_lossy();
 		let id = format!("{}{}", root.title, relpath);
@@ -31,21 +31,21 @@ impl Object {
 			id: id
 		})
 	}
-	
-	pub fn new_boxed(root: Arc<Root>, path: std::path::PathBuf) -> ::Result<Box<::Object>> {
+
+	pub fn new_boxed(root: Arc<Root>, path: std::path::PathBuf) -> Result<Box<::Object>, Error> {
 		let r = Self::new(root, path)?;
 		Ok(Box::new(r))
 	}
-	
+
 	pub fn new_root<P: Into<std::path::PathBuf>>
-		(name: String, path: P) -> ::Result<Object>
+		(name: String, path: P) -> Result<Object, Error>
 	{
 		let path = path.into();
 		let root = Arc::new(Root {
 			title: name.clone(),
 			path: path.clone(),
 		});
-		
+
 		Ok(Object {
 			root: root,
 			path: path,
@@ -65,10 +65,10 @@ impl ::Object for Object {
 			}
 		}
 	}
-	
+
 	fn file_type(&self) -> ::Type {
 		if self.is_dir() { return ::Type::Directory }
-		
+
 		match self.path.extension().and_then(std::ffi::OsStr::to_str) {
 			Some("avi") => ::Type::Video,
 			Some("mkv") => ::Type::Video,
@@ -78,31 +78,31 @@ impl ::Object for Object {
 			_ => ::Type::Other,
 		}
 	}
-	
+
 	fn title(&self) -> String {
 		self.path.file_name()
 			.map(|t| t.to_string_lossy().to_string())
 			.unwrap_or_else(|| "<No Title>".to_string())
 	}
-	
+
 	fn is_dir(&self) -> bool { self.path.is_dir() }
-	
-	fn lookup(&self, id: &str) -> ::Result<Box<::Object>> {
+
+	fn lookup(&self, id: &str) -> Result<Box<::Object>, Error> {
 		debug_assert_eq!(self.path, self.root.path);
-		
+
 		let mut base = self.path.clone();
 		let safepath = std::path::Path::new(id)
 			.iter()
 			.filter(|c| c != &"..")
 			.map(|osstr| std::path::Path::new(osstr));
 		base.extend(safepath);
-		
+
 		eprintln!("Lookup: {:?}", base);
-		
+
 		Self::new_boxed(self.root.clone(), base)
 	}
-	
-	fn children(&self) -> ::error::Result<Vec<Box<::Object>>> {
+
+	fn children(&self) -> Result<Vec<Box<::Object>>, Error> {
 		self.path.read_dir()
 			.chain_err(|| "Getting children of local directory.")?
 			.map(|result| result
@@ -112,12 +112,12 @@ impl ::Object for Object {
 				}))
 			.collect()
 	}
-	
-	fn ffmpeg_input(&self, _exec: &::Executors) -> ::Result<::ffmpeg::Input> {
+
+	fn ffmpeg_input(&self, _exec: &::Executors) -> Result<::ffmpeg::Input, Error> {
 		Ok(::ffmpeg::Input::Uri(&self.path))
 	}
-	
-	fn body(&self, _exec: &::Executors) -> ::Result<std::sync::Arc<::Media>> {
+
+	fn body(&self, _exec: &::Executors) -> Result<std::sync::Arc<::Media>, Error> {
 		Ok(std::sync::Arc::new(Media{path: self.path.clone()}))
 	}
 }
@@ -135,7 +135,7 @@ impl ::Media for Media {
 			total: Some(s),
 		}
 	}
-	
+
 	fn read_range(&self, start: u64, end: u64) -> ::ByteStream {
 		let mut file = match std::fs::File::open(&self.path) {
 			Ok(f) => f,

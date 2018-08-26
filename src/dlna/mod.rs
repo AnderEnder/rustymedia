@@ -5,7 +5,8 @@ use serde;
 use serde_xml_rs;
 use std;
 
-use error::ResultExt;
+use failure::Error;
+// use error::ResultExt;
 
 pub mod discovery;
 pub mod server;
@@ -26,16 +27,16 @@ impl Request {
 			req: req,
 		}
 	}
-	
+
 	fn path(&self) -> &str { &self.req.path()[self.path_offset..] }
-	
-	fn decoded_path(&self) -> ::Result<String> {
+
+	fn decoded_path(&self) -> Result<String, Error> {
 		percent_encoding::percent_decode(self.path().as_bytes())
 			.decode_utf8()
 			.chain_err(|| "Error percent-decoding path to utf8")
 			.map(|s| s.to_string())
 	}
-	
+
 	fn pop(&mut self) -> &str {
 		let next_chunk_start = self.path_offset;
 		let next_chunk_end = match self.path().find('/') {
@@ -48,32 +49,32 @@ impl Request {
 				self.path_offset
 			}
 		};
-		
+
 		let next_chunk = &self.req.path()[next_chunk_start..next_chunk_end];
 		// eprintln!("Pop {:?} from {:?}", next_chunk, self.path());
 		return next_chunk
 	}
-	
-	fn body_vec(self) -> Box<Future<Item=Vec<u8>, Error=::error::Error>> {
+
+	fn body_vec(self) -> Box<Future<Item=Vec<u8>, Error=Error>> {
 		Box::new(self.req.body()
 			.then(|r| r.chain_err(|| "Parsing request body."))
 			.fold(Vec::new(), |mut v, chunk| {
 				v.extend(chunk);
-				Ok::<_,::error::Error>(v)
+				Ok::<_,Error>(v)
 			}))
 	}
-	
-	fn body_str_lossy(self) -> Box<Future<Item=String, Error=::error::Error>> {
+
+	fn body_str_lossy(self) -> Box<Future<Item=String, Error=Error>> {
 		Box::new(self.req.body()
 			.then(|r| r.chain_err(|| "Parsing request body."))
 			.fold(String::new(), |mut s, chunk| {
 				s += &String::from_utf8_lossy(&chunk);
-				Ok::<_,::error::Error>(s)
+				Ok::<_, Error>(s)
 			}))
 	}
-	
+
 	fn to_xml<B: 'static + serde::Deserialize<'static> + std::fmt::Debug>(self)
-		-> Box<Future<Item=types::Envelope<B>, Error=::error::Error>>
+		-> Box<Future<Item=types::Envelope<B>, Error=Error>>
 	{
 		Box::new(self.body_vec()
 			.and_then(|v| {

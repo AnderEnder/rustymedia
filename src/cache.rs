@@ -2,6 +2,8 @@ use lru_cache;
 use smallvec;
 use std;
 
+use failure::Error;
+
 #[derive(Debug)]
 struct Entry {
 	format: ::ffmpeg::Format,
@@ -27,7 +29,7 @@ impl TranscodeCache {
 		item: &Box<::Object>,
 		format: &::ffmpeg::Format,
 		device: &::ffmpeg::Device,
-	) -> ::Result<std::sync::Arc<::Media>>
+	) -> Result<std::sync::Arc<::Media>, Error>
 	{
 		if format.compatible_with(device) { return item.body(&exec) }
 
