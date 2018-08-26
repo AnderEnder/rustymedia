@@ -9,6 +9,11 @@ use std::io::{Write};
 use std::os::unix::fs::FileExt;
 use std::os::unix::io::FromRawFd;
 
+use nix::fcntl::OFlag;
+use nix::sys::stat::Mode;
+use nix::libc::{O_APPEND, O_CLOEXEC, O_RDWR};
+use nix::libc::*;
+
 use error::ResultExt;
 
 fn start_cmd(cmd: &'static str) -> std::process::Command {
@@ -347,8 +352,8 @@ pub fn transcode(source: &Format, target: &Format, input: Input, exec: &::Execut
 	-> ::Result<std::sync::Arc<::Media>> {
 	let fd = nix::fcntl::open(
 		"/tmp",
-		{ use nix::fcntl::*; O_APPEND | O_CLOEXEC | O_TMPFILE | O_RDWR },
-		{ use nix::sys::stat::*; S_IRUSR | S_IWUSR })?;
+                OFlag::from_bits(O_APPEND | O_CLOEXEC | O_RDWR).unwrap(),
+		Mode::from_bits(S_IRUSR | S_IWUSR).unwrap())?;
 	let file = unsafe { std::fs::File::from_raw_fd(fd) };
 	
 	let mut cmd = start_ffmpeg();
