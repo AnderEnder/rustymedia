@@ -1,0 +1,42 @@
+language: rust
+cache: cargo
+sudo: true
+
+rust:
+  - nightly
+  - beta
+  - stable
+
+os:
+  - linux
+  - osx
+
+addons:
+  apt:
+    packages:
+      - libssl-dev
+
+matrix:
+  allow_failures:
+    - rust: nightly
+  fast_finish: true
+
+env:
+  global:
+    - RUST_BACKTRACE=1
+
+script:
+  - cargo build --verbose
+  - cargo test -- --nocapture
+  - |
+    if [[ "$TRAVIS_RUST_VERSION" == "stable" && "$TRAVIS_OS_NAME" == "linux" ]]; then
+      export CARGO_TARGET_DIR="$(pwd)/target"
+      RUSTFLAGS="--cfg procmacro2_semver_exempt" cargo install --force cargo-tarpaulin
+    fi
+
+after_success:
+  - |
+    if [[ "$TRAVIS_RUST_VERSION" == "stable" && "$TRAVIS_OS_NAME" == "linux" ]]; then
+      cargo tarpaulin --out Xml --no-count
+      bash <(curl -s https://codecov.io/bash)
+    fi
