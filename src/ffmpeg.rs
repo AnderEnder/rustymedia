@@ -15,6 +15,7 @@ use nix::libc::{O_APPEND, O_CLOEXEC, O_RDWR};
 use nix::libc::*;
 
 use failure::Error;
+use error::MediaError;
 
 fn start_cmd(cmd: &'static str) -> std::process::Command {
     let mut cmd = std::process::Command::new(cmd);
@@ -295,7 +296,7 @@ struct MediaStream {
 impl MediaStream {
     fn read(&mut self, buf: &mut Vec<u8>) -> Result<i64, Error> {
         let len = self.file.file.read_at(buf, self.offset)
-            .map_err(||format_err!("Error reading in follower."))?;
+            .map_err(|x|format_err!("Error reading in follower."))?;
         // eprintln!("STREAM read {}-{} size {}", self.offset, self.offset+len as u64, len);
         unsafe { buf.set_len(len); }
         return Ok(len as i64)
@@ -328,8 +329,8 @@ impl futures::Stream for MediaStream {
                     unsafe { buf.set_len(buf_size); }
                     let len = self.read(&mut buf)?;
                     if len != 0 {
-                        return Err(Error::Other(
-                            "Read EOF when expecting content".to_string()).into())
+                        return Err(MediaError::Other(
+                            "Read EOF when expecting content").into())
                     }
                     return Ok(futures::Async::Ready(Some(buf)))
                 }

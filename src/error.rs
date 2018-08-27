@@ -17,7 +17,7 @@ pub enum MediaError {
     #[fail(display = "Not found: {}", _0)]
     NotFound(String),
     #[fail(display = "{}", _0)]
-    Other(String),
+    Other(&'static str),
     #[fail(display = "{}", _0)]
     Unimplemented(&'static str),
     #[fail(display = "{}", _0)]

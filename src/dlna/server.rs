@@ -233,14 +233,14 @@ impl ServerRef {
 				};
 
 				let content = content
-					.map(|c| Ok(c.into()))
-					.map_err(|e| e.into());
+					.map(|c| Ok(c.into()));
+			//		.map_err(|e| e.into());
 
 				let (sender, body) = hyper::Body::pair();
 				server2.exec.spawn(
 					sender.send_all(content)
-						.map(|_| ())
-						.then(|r| r.map_err(format_err!("Error sending body."))))?;
+						.map(|_| ()))?;
+			//			.then(|r| r.map_err(format_err!("Error sending body."))))?;
 
 				eprintln!("Response: {:?}", response);
 				response.set_body(body);

@@ -104,9 +104,9 @@ impl ::Object for Object {
 
 	fn children(&self) -> Result<Vec<Box<::Object>>, Error> {
 		self.path.read_dir()
-			.map_err(|| format_err!("Getting children of local directory."))?
+			.map_err(|e| format_err!("Getting children of local directory."))?
 			.map(|result| result
-				.map_err(|| format_err!("Reading next direntry"))
+				.map_err(|e| format!("Reading next direntry {:?}", e))
 				.and_then(|entry| {
 					Self::new_boxed(self.root.clone(), entry.path())
 				}))
